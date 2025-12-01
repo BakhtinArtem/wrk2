@@ -65,7 +65,7 @@ Running
 
   function init(args)
   function request()
-  function response(status, headers, body)
+  function response(status, headers, body, request_id)
 
   The running phase begins with a single call to init(), followed by
   a call to request() and response() for each request cycle.
@@ -73,12 +73,27 @@ Running
   The init() function receives any extra command line arguments for the
   script which must be separated from wrk arguments with "--".
 
-  request() returns a string containing the HTTP request. Building a new
+  request() returns a string containing the HTTP request, and optionally
+  a second return value that will be passed to response() as request_id.
+  This allows you to track request-response pairs. The request_id can be
+  any Lua value (number, string, table, etc.) or nil. Building a new
   request each time is expensive, when testing a high performance server
   one solution is to pre-generate all requests in init() and do a quick
   lookup in request().
 
-  response() is called with the HTTP response status, headers, and body.
+  Example:
+    request_id = 0
+    function request()
+       request_id = request_id + 1
+       return wrk.format(), request_id
+    end
+
+    function response(status, headers, body, request_id)
+       print("Request " .. request_id .. " got status " .. status)
+    end
+
+  response() is called with the HTTP response status, headers, body, and
+  the request_id that was returned from the corresponding request() call.
   Parsing the headers and body is expensive, so if the response global is
   nil after the call to init() wrk will ignore the headers and body.
 

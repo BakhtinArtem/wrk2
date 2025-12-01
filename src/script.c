@@ -142,7 +142,7 @@ void script_init(lua_State *L, thread *t, int argc, char **argv) {
     lua_pop(t->L, 1);
 }
 
-void script_request(lua_State *L, char **buf, size_t *len) {
+void script_request(lua_State *L, char **buf, size_t *len, int *request_id_ref) {
     int pop = 1;
     lua_getglobal(L, "request");
     if (!lua_isfunction(L, -1)) {
@@ -150,14 +150,27 @@ void script_request(lua_State *L, char **buf, size_t *len) {
         lua_getfield(L, -1, "request");
         pop += 2;
     }
-    lua_call(L, 0, 1);
-    const char *str = lua_tolstring(L, -1, len);
+    lua_call(L, 0, 2);  // Call with 0 args, expect 2 returns (request string, request_id)
+    
+    // First return value: request string
+    const char *str = lua_tolstring(L, -2, len);
     *buf = realloc(*buf, *len);
     memcpy(*buf, str, *len);
-    lua_pop(L, pop);
+    
+    // Second return value: request ID (optional, can be nil)
+    // Store it in the Lua registry and return the reference
+    if (lua_isnil(L, -1)) {
+        *request_id_ref = LUA_REFNIL;
+    } else {
+        // Store the request ID in the registry
+        lua_pushvalue(L, -1);  // Copy the value
+        *request_id_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    
+    lua_pop(L, 1 + pop);  // Pop request_id, request string, and any extra stack items
 }
 
-void script_response(lua_State *L, int status, buffer *headers, buffer *body) {
+void script_response(lua_State *L, int status, buffer *headers, buffer *body, int request_id_ref) {
     lua_getglobal(L, "response");
     lua_pushinteger(L, status);
     lua_newtable(L);
@@ -169,7 +182,17 @@ void script_response(lua_State *L, int status, buffer *headers, buffer *body) {
     }
 
     lua_pushlstring(L, body->buffer, body->cursor - body->buffer);
-    lua_call(L, 3, 0);
+    
+    // Push request ID (4th argument)
+    if (request_id_ref != LUA_REFNIL) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, request_id_ref);
+        // Free the reference since we're done with it
+        luaL_unref(L, LUA_REGISTRYINDEX, request_id_ref);
+    } else {
+        lua_pushnil(L);
+    }
+    
+    lua_call(L, 4, 0);  // Call with 4 args: status, headers, body, request_id
 
     buffer_reset(headers);
     buffer_reset(body);
@@ -263,8 +286,13 @@ size_t script_verify_request(lua_State *L) {
     http_parser parser;
     char *request = NULL;
     size_t len, count = 0;
+    int request_id_ref;
 
-    script_request(L, &request, &len);
+    script_request(L, &request, &len, &request_id_ref);
+    // Clean up request_id_ref if it was set
+    if (request_id_ref != LUA_REFNIL) {
+        luaL_unref(L, LUA_REGISTRYINDEX, request_id_ref);
+    }
     http_parser_init(&parser, HTTP_REQUEST);
     parser.data = &count;
 

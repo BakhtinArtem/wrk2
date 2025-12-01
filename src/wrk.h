@@ -83,6 +83,7 @@ typedef struct connection {
     uint64_t latest_expected_start;
     uint64_t latest_connect;
     uint64_t latest_write;
+    int request_id_ref;  // Lua reference to request ID (LUA_REFNIL if not set)
 } connection;
 
 #endif /* WRK_H */

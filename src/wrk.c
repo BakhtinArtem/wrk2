@@ -258,9 +258,14 @@ void *thread_main(void *arg) {
 
     char *request = NULL;
     size_t length = 0;
+    int request_id_ref = LUA_REFNIL;
 
     if (!cfg.dynamic) {
-        script_request(thread->L, &request, &length);
+        script_request(thread->L, &request, &length, &request_id_ref);
+        // For static requests, we don't need to track request_id per connection
+        if (request_id_ref != LUA_REFNIL) {
+            luaL_unref(thread->L, LUA_REGISTRYINDEX, request_id_ref);
+        }
     }
 
     double throughput = (thread->throughput / 1000000.0) / thread->connections;
@@ -276,6 +281,7 @@ void *thread_main(void *arg) {
         c->catch_up_throughput = throughput * 2;
         c->complete   = 0;
         c->caught_up  = true;
+        c->request_id_ref = LUA_REFNIL;
         // Stagger connects 5 msec apart within thread:
         aeCreateTimeEvent(loop, i * 5, delayed_initial_connect, c, NULL);
     }
@@ -328,6 +334,11 @@ static int connect_socket(thread *thread, connection *c) {
 }
 
 static int reconnect_socket(thread *thread, connection *c) {
+    // Clean up any pending request_id_ref
+    if (c->request_id_ref != LUA_REFNIL) {
+        luaL_unref(thread->L, LUA_REGISTRYINDEX, c->request_id_ref);
+        c->request_id_ref = LUA_REFNIL;
+    }
     aeDeleteFileEvent(thread->loop, c->fd, AE_WRITABLE | AE_READABLE);
     sock.close(c);
     close(c->fd);
@@ -496,8 +507,10 @@ static int response_complete(http_parser *parser) {
 
     if (c->headers.buffer) {
         *c->headers.cursor++ = '\0';
-        script_response(thread->L, status, &c->headers, &c->body);
+        script_response(thread->L, status, &c->headers, &c->body, c->request_id_ref);
         c->state = FIELD;
+        // Reset request_id_ref after using it
+        c->request_id_ref = LUA_REFNIL;
     }
 
     if (now >= thread->stop_at) {
@@ -613,7 +626,12 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
     }
 
     if (!c->written && cfg.dynamic) {
-        script_request(thread->L, &c->request, &c->length);
+        // Free any previous request_id_ref before getting a new one
+        if (c->request_id_ref != LUA_REFNIL) {
+            luaL_unref(thread->L, LUA_REGISTRYINDEX, c->request_id_ref);
+            c->request_id_ref = LUA_REFNIL;
+        }
+        script_request(thread->L, &c->request, &c->length, &c->request_id_ref);
     }
 
     char  *buf = c->request + c->written;
