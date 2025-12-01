@@ -59,6 +59,7 @@ typedef struct connection {
         FIELD, VALUE
     } state;
     int fd;
+    uint64_t id;
     SSL *ssl;
     double throughput;
     double catch_up_throughput;

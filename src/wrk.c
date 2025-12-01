@@ -260,7 +260,7 @@ void *thread_main(void *arg) {
     size_t length = 0;
 
     if (!cfg.dynamic) {
-        script_request(thread->L, &request, &length);
+        script_request(thread->L, &request, &length, 0);
     }
 
     double throughput = (thread->throughput / 1000000.0) / thread->connections;
@@ -269,6 +269,7 @@ void *thread_main(void *arg) {
 
     for (uint64_t i = 0; i < thread->connections; i++, c++) {
         c->thread     = thread;
+        c->id         = i;
         c->ssl        = cfg.ctx ? SSL_new(cfg.ctx) : NULL;
         c->request    = request;
         c->length     = length;
@@ -496,7 +497,7 @@ static int response_complete(http_parser *parser) {
 
     if (c->headers.buffer) {
         *c->headers.cursor++ = '\0';
-        script_response(thread->L, status, &c->headers, &c->body);
+        script_response(thread->L, status, &c->headers, &c->body, c->id);
         c->state = FIELD;
     }
 
@@ -613,7 +614,7 @@ static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
     }
 
     if (!c->written && cfg.dynamic) {
-        script_request(thread->L, &c->request, &c->length);
+        script_request(thread->L, &c->request, &c->length, c->id);
     }
 
     char  *buf = c->request + c->written;
