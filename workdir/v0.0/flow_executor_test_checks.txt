@@ -1,0 +1,103 @@
+Flow Executor Test Commands
+===========================
+
+0) Run all stages sequentially
+------------------------------
+python3 workdir/run_all_stages.py --workdir workdir --target-url http://localhost:9966/
+
+Optional:
+- run subset only: `python3 workdir/run_all_stages.py --workdir workdir --stages lifecycle`
+- forward sanitize flag: `python3 workdir/run_all_stages.py --workdir workdir --sanitize-control-chars`
+- continue after stage errors: `python3 workdir/run_all_stages.py --workdir workdir --continue-on-error`
+- by default wrk is invoked with `-- --no-flow-failure-logs` (quiet per-line failures); use `--flow-failure-logs` on the runner to print `flow_failure ...` lines again
+
+Expected:
+- Stages are discovered from `workdir/flow.yaml`.
+- For each stage, preprocessor runs and wrk executes with stage-specific wrk2 params.
+- Final summary prints per-stage status and non-zero exit code if any stage failed.
+
+1) Generate artifacts
+---------------------
+python3 workdir/preprocess_flow.py --workdir workdir --stage lifecycle
+
+Optional sanitation mode (readability + fewer invalid control chars in artifacts):
+python3 workdir/preprocess_flow.py --workdir workdir --stage lifecycle --sanitize-control-chars
+
+Expected:
+- workdir/generated/lifecycle_manifest.json exists
+- workdir/generated/lifecycle_iterations.json exists
+- workdir/generated/lifecycle_manifest.lua exists
+- workdir/generated/lifecycle_iterations.lua exists
+
+2) Smoke run (single connection, continuous mode)
+-------------------------------------------------
+./wrk -t1 -c1 -R2 -d5s -s scripts/flow_executor.lua http://localhost:9966/
+
+Silence per-line `flow_failure ...` prints (counters still updated in done()):
+./wrk -t1 -c1 -R2 -d5s -s scripts/flow_executor.lua http://localhost:9966/ -- --no-flow-failure-logs
+
+Explicit re-enable (default is on; useful after a wrapper passes --no-...):
+./wrk -t1 -c1 -R2 -d5s -s scripts/flow_executor.lua http://localhost:9966/ -- --flow-failure-logs
+
+Acceptance checks:
+- iterations_started > 1 (same connection keeps taking next iterations).
+- iterations_started >= iterations_completed + iterations_failed
+- accounting_ok: true
+- partition_ok: true
+
+3) Partition run (10 connections, continuous mode)
+--------------------------------------------------
+./wrk -t2 -c10 -R10 -d10s -s scripts/flow_executor.lua http://localhost:9966/
+
+Acceptance checks:
+- iterations_assigned >= 10
+- iterations_started > 10
+- iterations_started >= iterations_completed + iterations_failed
+- accounting_ok: true
+- partition_ok: true
+- Per-thread status_by_flow lines are printed.
+- Per-thread failures_by_flow lines are printed when failures happen.
+
+4) Failure output check
+-----------------------
+Run any scenario that returns non-2xx/3xx for at least one step.
+
+Acceptance checks:
+- At least one `flow_failure ...` line is printed during run.
+- non_success_responses > 0 in done() output.
+- error_logs_emitted > 0 in done() output.
+
+5) JSON parse error regression check
+------------------------------------
+Use generated data known to contain control chars, then run:
+./wrk -t1 -c1 -R2 -d5s -s scripts/flow_executor.lua http://localhost:9966/
+
+Acceptance checks:
+- No `flow_failure` body text contains `HttpMessageNotReadable` caused by illegal unquoted control characters.
+- No server-side JSON parse errors attributable to raw control chars from request payload.
+
+6) Stage/Step reference substitution check
+------------------------------------------
+Using new reference syntax in iteration files:
+- `lifecycle.<flowId>.responseBody#/...`
+- `lifecycle.<flowId>.endpoint#/...`
+
+Run:
+./wrk -t1 -c1 -R2 -d5s -s scripts/flow_executor.lua http://localhost:9966/
+
+Acceptance checks:
+- No `flow_failure` reason contains:
+  - `reference stage mismatch`
+  - `missing step output`
+  - `missing source 'responseBody'` or `missing source 'endpoint'`
+  - `reference pointer error`
+- Requests that depend on `endpoint#/ownerId` and `responseBody#/id` are resolved with non-literal values (no raw `lifecycle.*#...` text in path logs).
+
+Notes:
+- Executor now runs continuously; it no longer calls thread:stop when all
+  currently active iterations are complete.
+- reuse_mode controls dataset exhaustion behavior:
+  - wrap: continues by reusing pre-generated iterations.
+  - stop_on_exhaustion: exhausted connections fall back to idle request.
+- iterations_failed or pointer_resolve_failures > 0 can happen if upstream API
+  returns 4xx/5xx and later steps depend on pointer values from failed responses.

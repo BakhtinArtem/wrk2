@@ -13,7 +13,8 @@ deps/luajit/src/lj_libdef.h
 deps/luajit/src/lj_recdef.h
 deps/luajit/src/lj_vm.s
 deps/luajit/src/luajit
-workdir/
+workdir/**/data/
+stats-out/
 
 .idea
 CMakeLists.txt

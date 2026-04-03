@@ -1,0 +1,268 @@
+stages:
+  lifecycle:
+    wrk2params: -t2 -c15 -d30s -R1000
+    flow:
+      - createOwner:
+        operationId: addOwner
+        entrynode: true
+        edges:
+          - to: getOwnerByID
+            weight: 0.25
+          - to: listOwnersByLastName
+            weight: 0.15
+          - to: updateOwnerByID
+            weight: 0.15
+          - to: addPetToOwner
+            weight: 0.35
+          - to: deleteOwnerByID
+            weight: 0.10
+
+      - listOwnersByLastName:
+        operationId: listOwners
+
+      - getOwnerByID:
+        operationId: getOwner
+
+      - updateOwnerByID:
+        operationId: updateOwner
+
+      - deleteOwnerByID:
+        operationId: deleteOwner
+
+      - addPetToOwner:
+        operationId: addPetToOwner
+        edges:
+          - to: getOwnersPetByID
+            weight: 0.40
+          - to: updateOwnersPetByID
+            weight: 0.30
+          - to: addVisitToOwnersPet
+            weight: 0.30
+
+      - getOwnersPetByID:
+        operationId: getOwnersPet
+
+      - updateOwnersPetByID:
+        operationId: updateOwnersPet
+
+      - addVisitToOwnersPet:
+        operationId: addVisitToOwner
+        edges:
+          - to: getVisitByID
+            weight: 0.60
+          - to: listVisits
+            weight: 0.40
+
+      - listVisits:
+        operationId: listVisits
+
+      - getVisitByID:
+        operationId: getVisit
+
+  mixed-smoke:
+    wrk2params: -t2 -c15 -d30s -R1000
+    flow:
+      - createUser:
+        operationId: addUser
+        entrynode: true
+        edges:
+          - to: createPetType
+            weight: 0.18
+          - to: createSpecialty
+            weight: 0.18
+          - to: createVet
+            weight: 0.18
+          - to: createVisitGlobal
+            weight: 0.14
+          - to: listPets
+            weight: 0.12
+          - to: listVets
+            weight: 0.10
+          - to: failingOops
+            weight: 0.10
+
+      - failingOops:
+        operationId: failingRequest
+
+      - createPetType:
+        operationId: addPetType
+        edges:
+          - to: listPetTypes
+            weight: 0.34
+          - to: getPetTypeByID
+            weight: 0.33
+          - to: updatePetTypeByID
+            weight: 0.33
+
+      - listPetTypes:
+        operationId: listPetTypes
+
+      - getPetTypeByID:
+        operationId: getPetType
+
+      - updatePetTypeByID:
+        operationId: updatePetType
+        edges:
+          - to: deletePetTypeByID
+            weight: 1.0
+
+      - deletePetTypeByID:
+        operationId: deletePetType
+
+      - createSpecialty:
+        operationId: addSpecialty
+        edges:
+          - to: listSpecialties
+            weight: 0.34
+          - to: getSpecialtyByID
+            weight: 0.33
+          - to: updateSpecialtyByID
+            weight: 0.33
+
+      - listSpecialties:
+        operationId: listSpecialties
+
+      - getSpecialtyByID:
+        operationId: getSpecialty
+
+      - updateSpecialtyByID:
+        operationId: updateSpecialty
+        edges:
+          - to: deleteSpecialtyByID
+            weight: 1.0
+
+      - deleteSpecialtyByID:
+        operationId: deleteSpecialty
+
+      - createVet:
+        operationId: addVet
+        edges:
+          - to: listVets
+            weight: 0.34
+          - to: getVetByID
+            weight: 0.33
+          - to: updateVetByID
+            weight: 0.33
+
+      - listVets:
+        operationId: listVets
+
+      - getVetByID:
+        operationId: getVet
+
+      - updateVetByID:
+        operationId: updateVet
+        edges:
+          - to: deleteVetByID
+            weight: 1.0
+
+      - deleteVetByID:
+        operationId: deleteVet
+
+      - createVisitGlobal:
+        operationId: addVisit
+        edges:
+          - to: getVisitGlobalByID
+            weight: 0.50
+          - to: updateVisitGlobalByID
+            weight: 0.50
+
+      - getVisitGlobalByID:
+        operationId: getVisit
+
+      - updateVisitGlobalByID:
+        operationId: updateVisit
+        edges:
+          - to: deleteVisitGlobalByID
+            weight: 1.0
+
+      - deleteVisitGlobalByID:
+        operationId: deleteVisit
+
+      - listPets:
+        operationId: listPets
+        edges:
+          - to: getPetByID
+            weight: 0.50
+          - to: updatePetByID
+            weight: 0.50
+
+      - getPetByID:
+        operationId: getPet
+
+      - updatePetByID:
+        operationId: updatePet
+        edges:
+          - to: deletePetByID
+            weight: 1.0
+
+      - deletePetByID:
+        operationId: deletePet
+
+  read-heavy:
+    wrk2params: -t2 -c15 -d30s -R1000
+    flow:
+      - listOwnersRead:
+        operationId: listOwners
+        entrynode: true
+        edges:
+          - to: getOwnerRead
+            weight: 0.20
+          - to: listPetsRead
+            weight: 0.20
+          - to: getPetRead
+            weight: 0.15
+          - to: listVetsRead
+            weight: 0.15
+          - to: getVetRead
+            weight: 0.10
+          - to: listPetTypesRead
+            weight: 0.10
+          - to: listVisitsRead
+            weight: 0.10
+
+      - getOwnerRead:
+        operationId: getOwner
+
+      - listPetsRead:
+        operationId: listPets
+
+      - getPetRead:
+        operationId: getPet
+
+      - listVetsRead:
+        operationId: listVets
+
+      - getVetRead:
+        operationId: getVet
+
+      - listPetTypesRead:
+        operationId: listPetTypes
+
+      - getPetTypeRead:
+        operationId: getPetType
+
+      - listVisitsRead:
+        operationId: listVisits
+        edges:
+          - to: getVisitRead
+            weight: 0.50
+          - to: listSpecialtiesRead
+            weight: 0.50
+
+      - getVisitRead:
+        operationId: getVisit
+
+      - listSpecialtiesRead:
+        operationId: listSpecialties
+        edges:
+          - to: getSpecialtyRead
+            weight: 0.60
+          - to: failingOopsRead
+            weight: 0.40
+
+      - getSpecialtyRead:
+        operationId: getSpecialty
+
+      - failingOopsRead:
+        operationId: failingRequest

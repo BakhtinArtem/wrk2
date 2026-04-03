@@ -8,6 +8,10 @@
   Example:
     python3 workdir/preprocess_flow.py --workdir workdir --stage lifecycle
     ./wrk -t2 -c10 -R10 -d10s -s scripts/flow_executor.lua http://localhost:9966
+
+  Optional script args (after --, see SCRIPTING):
+    ./wrk ... -s scripts/flow_executor.lua http://localhost:9966/ -- --no-flow-failure-logs
+    ./wrk ... -s scripts/flow_executor.lua http://localhost:9966/ -- --flow-failure-logs
 ]]
 ---@diagnostic disable: undefined-global
 
@@ -23,6 +27,8 @@ local thread_id = 0
 local conn_state = {}
 local status_by_flow = {}
 local failures_by_flow = {}
+local step_latency_values_by_flow = {}
+local step_latency_dropped_by_flow = {}
 
 local idle_request = nil
 -- Shared empty table: never mutate; avoids per-request {} alloc for missing params.
@@ -33,6 +39,7 @@ local reuse_mode = "wrap" -- wrap | stop_on_exhaustion
 local success_mode = "http2xx3xx" -- http2xx3xx | strict_expected
 local max_error_logs_per_thread = 50
 local max_body_snippet_bytes = 220
+local max_raw_step_samples_per_flow = 200
 
 local function inc_status(flow_id, status)
   local key = tostring(flow_id) .. ":" .. tostring(status)
@@ -51,6 +58,74 @@ local function encode_status_map(m)
   end
   -- Omit sort: cheaper on hot path; order is diagnostic-only.
   return table.concat(parts, ",")
+end
+
+local function encode_raw_step_map(m)
+  local keys = {}
+  for k, _ in pairs(m) do
+    keys[#keys + 1] = tostring(k)
+  end
+  table.sort(keys)
+  local lines = {}
+  for _, k in ipairs(keys) do
+    local vals = m[k]
+    if vals and #vals > 0 then
+      lines[#lines + 1] = k .. ":" .. table.concat(vals, ",")
+    end
+  end
+  return table.concat(lines, ";")
+end
+
+local function encode_number_map(m)
+  local keys = {}
+  for k, _ in pairs(m) do
+    keys[#keys + 1] = tostring(k)
+  end
+  table.sort(keys)
+  local lines = {}
+  for _, k in ipairs(keys) do
+    lines[#lines + 1] = k .. "=" .. tostring(m[k] or 0)
+  end
+  return table.concat(lines, ",")
+end
+
+local function parse_keyed_csv_line(text, entry_sep, kv_sep)
+  local out = {}
+  if not text or text == "" then
+    return out
+  end
+  for token in text:gmatch("([^" .. entry_sep .. "]+)") do
+    local key, value = token:match("^(.-)" .. kv_sep .. "(.*)$")
+    if key and value and key ~= "" then
+      out[key] = value
+    end
+  end
+  return out
+end
+
+local now_us
+do
+  local ok, ffi = pcall(require, "ffi")
+  if ok then
+    ffi.cdef([[
+      typedef long time_t;
+      typedef long suseconds_t;
+      struct timeval {
+        time_t tv_sec;
+        suseconds_t tv_usec;
+      };
+      int gettimeofday(struct timeval *tv, void *tz);
+    ]])
+    local tv = ffi.new("struct timeval")
+    now_us = function()
+      ffi.C.gettimeofday(tv, nil)
+      return (tonumber(tv.tv_sec) * 1000000) + tonumber(tv.tv_usec)
+    end
+  else
+    now_us = function()
+      return math.floor(os.clock() * 1000000)
+    end
+  end
 end
 
 local function json_error(msg)
@@ -578,6 +653,9 @@ local function body_snippet(text)
 end
 
 local function log_failure(conn_id, st, reason, status, body)
+  if not flow_failure_logs_enabled then
+    return
+  end
   if _G.fe_error_logs_emitted >= max_error_logs_per_thread then
     return
   end
@@ -613,6 +691,8 @@ local function ensure_conn_state(conn_id)
     current_method = nil,
     current_path = nil,
     current_endpoint_params = nil,
+    current_step_started_us = nil,
+    current_step_key = nil,
     step_outputs = {},
   }
   local cpthread = manifest.wrk2.connections_per_thread
@@ -657,6 +737,8 @@ local function claim_next_iteration(conn_id, st)
   st.current_method = nil
   st.current_path = nil
   st.current_endpoint_params = nil
+  st.current_step_started_us = nil
+  st.current_step_key = nil
   st.step_outputs = {}
 
   _G.fe_iterations_assigned = _G.fe_iterations_assigned + 1
@@ -675,6 +757,8 @@ local function fail_current_iteration(conn_id, st, reason, status, body)
   st.iteration_index = nil
   st.step_index = 0
   st.last_response = nil
+  st.current_step_started_us = nil
+  st.current_step_key = nil
 end
 
 local function complete_current_iteration(st)
@@ -683,6 +767,35 @@ local function complete_current_iteration(st)
   st.step_index = 0
   st.last_response = nil
   st.last_error = nil
+  st.current_step_started_us = nil
+  st.current_step_key = nil
+end
+
+local function record_step_elapsed(st)
+  if not st then
+    return
+  end
+  if not st.current_step_started_us or not st.current_step_key then
+    return
+  end
+  local elapsed = now_us() - st.current_step_started_us
+  if elapsed < 0 then
+    elapsed = 0
+  end
+  local key = tostring(st.current_step_key)
+  local values = step_latency_values_by_flow[key]
+  if not values then
+    values = {}
+    step_latency_values_by_flow[key] = values
+  end
+  if #values < max_raw_step_samples_per_flow then
+    values[#values + 1] = tostring(elapsed)
+  else
+    step_latency_dropped_by_flow[key] = (step_latency_dropped_by_flow[key] or 0) + 1
+    _G.fe_step_raw_samples_dropped = (_G.fe_step_raw_samples_dropped or 0) + 1
+  end
+  st.current_step_started_us = nil
+  st.current_step_key = nil
 end
 
 local function prepare_active_iteration(conn_id)
@@ -760,6 +873,8 @@ local function build_request_for_state(conn_id, st)
   st.current_method = step.method
   st.current_path = path
   st.current_endpoint_params = shallow_copy(path_params or EMPTY_TABLE)
+  st.current_step_started_us = now_us()
+  st.current_step_key = tostring(step.flowId or "unknown")
 
   return wrk.format(step.method, path, final_headers, body_text)
 end
@@ -767,6 +882,8 @@ end
 local function finalize_thread_status()
   _G.fe_status_line = encode_status_map(status_by_flow)
   _G.fe_failure_line = encode_status_map(failures_by_flow)
+  _G.fe_step_raw_line = encode_raw_step_map(step_latency_values_by_flow)
+  _G.fe_step_raw_dropped_line = encode_number_map(step_latency_dropped_by_flow)
 end
 
 local function active_iterations()
@@ -842,6 +959,7 @@ local function on_decode_response_body(body)
 end
 
 local function response_flow(conn_id, st, status, body)
+  record_step_elapsed(st)
   if st.current_flow_id then
     inc_status(st.current_flow_id, status)
   end
@@ -866,6 +984,9 @@ local function init_runtime_counters()
   _G.fe_error_logs_emitted = 0
   _G.fe_status_line = ""
   _G.fe_failure_line = ""
+  _G.fe_step_raw_line = ""
+  _G.fe_step_raw_dropped_line = ""
+  _G.fe_step_raw_samples_dropped = 0
   _G.fe_active_iterations = 0
   _G.fe_max_conn_seen = -1
 end
@@ -888,6 +1009,14 @@ function init(args)
   thread_id = tonumber(flow_thread_id) or 0
   if thread_id <= 0 then
     error("flow_thread_id missing; setup(thread) was not executed")
+  end
+
+  for _, a in ipairs(args or {}) do
+    if a == "--flow-failure-logs" then
+      flow_failure_logs_enabled = true
+    elseif a == "--no-flow-failure-logs" then
+      flow_failure_logs_enabled = false
+    end
   end
 
   init_runtime_counters()
@@ -927,6 +1056,9 @@ function done(summary, latency, requests)
   local expected_connections_seen = 0
   local status_lines = {}
   local failure_lines = {}
+  local raw_by_flow = {}
+  local dropped_by_flow = {}
+  local dropped_total = 0
 
   for idx, thread in ipairs(threads) do
     assigned = assigned + (thread:get("fe_iterations_assigned") or 0)
@@ -952,6 +1084,25 @@ function done(summary, latency, requests)
     if fline and fline ~= "" then
       failure_lines[#failure_lines + 1] = string.format("  thread %d failures_by_flow: %s", idx, fline)
     end
+    local raw_line = thread:get("fe_step_raw_line")
+    local raw_pairs = parse_keyed_csv_line(raw_line, ";", ":")
+    for flow_id, csv in pairs(raw_pairs) do
+      if csv ~= "" then
+        local prev = raw_by_flow[flow_id]
+        if prev and prev ~= "" then
+          raw_by_flow[flow_id] = prev .. "," .. csv
+        else
+          raw_by_flow[flow_id] = csv
+        end
+      end
+    end
+    local dropped_line = thread:get("fe_step_raw_dropped_line")
+    local dropped_pairs = parse_keyed_csv_line(dropped_line, ",", "=")
+    for flow_id, count_text in pairs(dropped_pairs) do
+      local inc = tonumber(count_text) or 0
+      dropped_by_flow[flow_id] = (dropped_by_flow[flow_id] or 0) + inc
+    end
+    dropped_total = dropped_total + (thread:get("fe_step_raw_samples_dropped") or 0)
   end
 
   print("")
@@ -973,6 +1124,23 @@ function done(summary, latency, requests)
   for _, line in ipairs(failure_lines) do
     print(line)
   end
+  local raw_keys = {}
+  for k, _ in pairs(raw_by_flow) do
+    raw_keys[#raw_keys + 1] = k
+  end
+  table.sort(raw_keys)
+  for _, flow_id in ipairs(raw_keys) do
+    print(string.format("step_raw_us %s: %s", flow_id, raw_by_flow[flow_id]))
+  end
+  local dropped_keys = {}
+  for k, _ in pairs(dropped_by_flow) do
+    dropped_keys[#dropped_keys + 1] = k
+  end
+  table.sort(dropped_keys)
+  for _, flow_id in ipairs(dropped_keys) do
+    print(string.format("step_raw_samples_dropped %s: %d", flow_id, dropped_by_flow[flow_id] or 0))
+  end
+  print(string.format("step_raw_samples_dropped_total: %d", dropped_total))
   print(string.format("connections_seen: %d", expected_connections_seen))
   print(string.format("partition_ok: %s", (expected_connections_seen > 0 and assigned >= expected_connections_seen) and "true" or "false"))
   print(string.format("accounting_ok: %s", (started >= (completed + failed)) and "true" or "false"))
