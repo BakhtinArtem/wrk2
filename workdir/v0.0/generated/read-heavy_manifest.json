@@ -1,0 +1,284 @@
+{
+  "stage": "read-heavy",
+  "wrk2": {
+    "raw": "-t2 -c15 -d30s -R1000",
+    "threads": 2,
+    "connections": 15,
+    "duration": "30s",
+    "rate": 1000,
+    "connections_per_thread": 7
+  },
+  "openapi_server": "http://localhost:9966/petclinic/api",
+  "entryNodes": [
+    "listOwnersRead"
+  ],
+  "nodes": {
+    "listOwnersRead": {
+      "name": "listOwnersRead",
+      "operationId": "listOwners",
+      "entrynode": true,
+      "edges": [
+        {
+          "to": "getOwnerRead",
+          "weight": 0.2
+        },
+        {
+          "to": "listPetsRead",
+          "weight": 0.2
+        },
+        {
+          "to": "getPetRead",
+          "weight": 0.15
+        },
+        {
+          "to": "listVetsRead",
+          "weight": 0.15
+        },
+        {
+          "to": "getVetRead",
+          "weight": 0.1
+        },
+        {
+          "to": "listPetTypesRead",
+          "weight": 0.1
+        },
+        {
+          "to": "listVisitsRead",
+          "weight": 0.1
+        }
+      ]
+    },
+    "getOwnerRead": {
+      "name": "getOwnerRead",
+      "operationId": "getOwner",
+      "entrynode": false,
+      "edges": []
+    },
+    "listPetsRead": {
+      "name": "listPetsRead",
+      "operationId": "listPets",
+      "entrynode": false,
+      "edges": []
+    },
+    "getPetRead": {
+      "name": "getPetRead",
+      "operationId": "getPet",
+      "entrynode": false,
+      "edges": []
+    },
+    "listVetsRead": {
+      "name": "listVetsRead",
+      "operationId": "listVets",
+      "entrynode": false,
+      "edges": []
+    },
+    "getVetRead": {
+      "name": "getVetRead",
+      "operationId": "getVet",
+      "entrynode": false,
+      "edges": []
+    },
+    "listPetTypesRead": {
+      "name": "listPetTypesRead",
+      "operationId": "listPetTypes",
+      "entrynode": false,
+      "edges": []
+    },
+    "getPetTypeRead": {
+      "name": "getPetTypeRead",
+      "operationId": "getPetType",
+      "entrynode": false,
+      "edges": []
+    },
+    "listVisitsRead": {
+      "name": "listVisitsRead",
+      "operationId": "listVisits",
+      "entrynode": false,
+      "edges": [
+        {
+          "to": "getVisitRead",
+          "weight": 0.5
+        },
+        {
+          "to": "listSpecialtiesRead",
+          "weight": 0.5
+        }
+      ]
+    },
+    "getVisitRead": {
+      "name": "getVisitRead",
+      "operationId": "getVisit",
+      "entrynode": false,
+      "edges": []
+    },
+    "listSpecialtiesRead": {
+      "name": "listSpecialtiesRead",
+      "operationId": "listSpecialties",
+      "entrynode": false,
+      "edges": [
+        {
+          "to": "getSpecialtyRead",
+          "weight": 0.6
+        },
+        {
+          "to": "failingOopsRead",
+          "weight": 0.4
+        }
+      ]
+    },
+    "getSpecialtyRead": {
+      "name": "getSpecialtyRead",
+      "operationId": "getSpecialty",
+      "entrynode": false,
+      "edges": []
+    },
+    "failingOopsRead": {
+      "name": "failingOopsRead",
+      "operationId": "failingRequest",
+      "entrynode": false,
+      "edges": []
+    }
+  },
+  "operationMap": {
+    "failingRequest": {
+      "method": "GET",
+      "path": "/oops"
+    },
+    "addOwner": {
+      "method": "POST",
+      "path": "/owners"
+    },
+    "listOwners": {
+      "method": "GET",
+      "path": "/owners"
+    },
+    "getOwner": {
+      "method": "GET",
+      "path": "/owners/{ownerId}"
+    },
+    "updateOwner": {
+      "method": "PUT",
+      "path": "/owners/{ownerId}"
+    },
+    "deleteOwner": {
+      "method": "DELETE",
+      "path": "/owners/{ownerId}"
+    },
+    "addPetToOwner": {
+      "method": "POST",
+      "path": "/owners/{ownerId}/pets"
+    },
+    "getOwnersPet": {
+      "method": "GET",
+      "path": "/owners/{ownerId}/pets/{petId}"
+    },
+    "updateOwnersPet": {
+      "method": "PUT",
+      "path": "/owners/{ownerId}/pets/{petId}"
+    },
+    "addVisitToOwner": {
+      "method": "POST",
+      "path": "/owners/{ownerId}/pets/{petId}/visits"
+    },
+    "addPetType": {
+      "method": "POST",
+      "path": "/pettypes"
+    },
+    "listPetTypes": {
+      "method": "GET",
+      "path": "/pettypes"
+    },
+    "getPetType": {
+      "method": "GET",
+      "path": "/pettypes/{petTypeId}"
+    },
+    "updatePetType": {
+      "method": "PUT",
+      "path": "/pettypes/{petTypeId}"
+    },
+    "deletePetType": {
+      "method": "DELETE",
+      "path": "/pettypes/{petTypeId}"
+    },
+    "listPets": {
+      "method": "GET",
+      "path": "/pets"
+    },
+    "getPet": {
+      "method": "GET",
+      "path": "/pets/{petId}"
+    },
+    "updatePet": {
+      "method": "PUT",
+      "path": "/pets/{petId}"
+    },
+    "deletePet": {
+      "method": "DELETE",
+      "path": "/pets/{petId}"
+    },
+    "addVisit": {
+      "method": "POST",
+      "path": "/visits"
+    },
+    "listVisits": {
+      "method": "GET",
+      "path": "/visits"
+    },
+    "getVisit": {
+      "method": "GET",
+      "path": "/visits/{visitId}"
+    },
+    "updateVisit": {
+      "method": "PUT",
+      "path": "/visits/{visitId}"
+    },
+    "deleteVisit": {
+      "method": "DELETE",
+      "path": "/visits/{visitId}"
+    },
+    "addSpecialty": {
+      "method": "POST",
+      "path": "/specialties"
+    },
+    "listSpecialties": {
+      "method": "GET",
+      "path": "/specialties"
+    },
+    "getSpecialty": {
+      "method": "GET",
+      "path": "/specialties/{specialtyId}"
+    },
+    "updateSpecialty": {
+      "method": "PUT",
+      "path": "/specialties/{specialtyId}"
+    },
+    "deleteSpecialty": {
+      "method": "DELETE",
+      "path": "/specialties/{specialtyId}"
+    },
+    "addVet": {
+      "method": "POST",
+      "path": "/vets"
+    },
+    "listVets": {
+      "method": "GET",
+      "path": "/vets"
+    },
+    "getVet": {
+      "method": "GET",
+      "path": "/vets/{vetId}"
+    },
+    "updateVet": {
+      "method": "PUT",
+      "path": "/vets/{vetId}"
+    },
+    "deleteVet": {
+      "method": "DELETE",
+      "path": "/vets/{vetId}"
+    },
+    "addUser": {
+      "method": "POST",
+      "path": "/users"
+    }
+  }
+}

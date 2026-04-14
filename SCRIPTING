@@ -64,8 +64,8 @@ Setup
 Running
 
   function init(args)
-  function request()
-  function response(status, headers, body)
+  function request(conn_id)
+  function response(status, headers, body, conn_id)
 
   The running phase begins with a single call to init(), followed by
   a call to request() and response() for each request cycle.
@@ -73,14 +73,18 @@ Running
   The init() function receives any extra command line arguments for the
   script which must be separated from wrk arguments with "--".
 
-  request() returns a string containing the HTTP request. Building a new
+  request(conn_id) returns a string containing the HTTP request. The conn_id
+  parameter is the connection ID (0-based index within the thread) that can
+  be used to track which connection is making the request. Building a new
   request each time is expensive, when testing a high performance server
   one solution is to pre-generate all requests in init() and do a quick
   lookup in request().
 
-  response() is called with the HTTP response status, headers, and body.
-  Parsing the headers and body is expensive, so if the response global is
-  nil after the call to init() wrk will ignore the headers and body.
+  response(status, headers, body, conn_id) is called with the HTTP response
+  status, headers, body, and the connection ID that received the response.
+  The conn_id parameter matches the one passed to request() for the same
+  connection. Parsing the headers and body is expensive, so if the response
+  global is nil after the call to init() wrk will ignore the headers and body.
 
 Done
 

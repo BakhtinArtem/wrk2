@@ -1,0 +1,268 @@
+{
+  "stage": "lifecycle",
+  "wrk2": {
+    "raw": "-t2 -c15 -d30s -R1000",
+    "threads": 2,
+    "connections": 15,
+    "duration": "30s",
+    "rate": 1000,
+    "connections_per_thread": 7
+  },
+  "openapi_server": "http://localhost:9966/petclinic/api",
+  "entryNodes": [
+    "createOwner"
+  ],
+  "nodes": {
+    "createOwner": {
+      "name": "createOwner",
+      "operationId": "addOwner",
+      "entrynode": true,
+      "edges": [
+        {
+          "to": "getOwnerByID",
+          "weight": 0.25
+        },
+        {
+          "to": "listOwnersByLastName",
+          "weight": 0.15
+        },
+        {
+          "to": "updateOwnerByID",
+          "weight": 0.15
+        },
+        {
+          "to": "addPetToOwner",
+          "weight": 0.35
+        },
+        {
+          "to": "deleteOwnerByID",
+          "weight": 0.1
+        }
+      ]
+    },
+    "listOwnersByLastName": {
+      "name": "listOwnersByLastName",
+      "operationId": "listOwners",
+      "entrynode": false,
+      "edges": []
+    },
+    "getOwnerByID": {
+      "name": "getOwnerByID",
+      "operationId": "getOwner",
+      "entrynode": false,
+      "edges": []
+    },
+    "updateOwnerByID": {
+      "name": "updateOwnerByID",
+      "operationId": "updateOwner",
+      "entrynode": false,
+      "edges": []
+    },
+    "deleteOwnerByID": {
+      "name": "deleteOwnerByID",
+      "operationId": "deleteOwner",
+      "entrynode": false,
+      "edges": []
+    },
+    "addPetToOwner": {
+      "name": "addPetToOwner",
+      "operationId": "addPetToOwner",
+      "entrynode": false,
+      "edges": [
+        {
+          "to": "getOwnersPetByID",
+          "weight": 0.4
+        },
+        {
+          "to": "updateOwnersPetByID",
+          "weight": 0.3
+        },
+        {
+          "to": "addVisitToOwnersPet",
+          "weight": 0.3
+        }
+      ]
+    },
+    "getOwnersPetByID": {
+      "name": "getOwnersPetByID",
+      "operationId": "getOwnersPet",
+      "entrynode": false,
+      "edges": []
+    },
+    "updateOwnersPetByID": {
+      "name": "updateOwnersPetByID",
+      "operationId": "updateOwnersPet",
+      "entrynode": false,
+      "edges": []
+    },
+    "addVisitToOwnersPet": {
+      "name": "addVisitToOwnersPet",
+      "operationId": "addVisitToOwner",
+      "entrynode": false,
+      "edges": [
+        {
+          "to": "getVisitByID",
+          "weight": 0.6
+        },
+        {
+          "to": "listVisits",
+          "weight": 0.4
+        }
+      ]
+    },
+    "listVisits": {
+      "name": "listVisits",
+      "operationId": "listVisits",
+      "entrynode": false,
+      "edges": []
+    },
+    "getVisitByID": {
+      "name": "getVisitByID",
+      "operationId": "getVisit",
+      "entrynode": false,
+      "edges": []
+    }
+  },
+  "operationMap": {
+    "failingRequest": {
+      "method": "GET",
+      "path": "/oops"
+    },
+    "addOwner": {
+      "method": "POST",
+      "path": "/owners"
+    },
+    "listOwners": {
+      "method": "GET",
+      "path": "/owners"
+    },
+    "getOwner": {
+      "method": "GET",
+      "path": "/owners/{ownerId}"
+    },
+    "updateOwner": {
+      "method": "PUT",
+      "path": "/owners/{ownerId}"
+    },
+    "deleteOwner": {
+      "method": "DELETE",
+      "path": "/owners/{ownerId}"
+    },
+    "addPetToOwner": {
+      "method": "POST",
+      "path": "/owners/{ownerId}/pets"
+    },
+    "getOwnersPet": {
+      "method": "GET",
+      "path": "/owners/{ownerId}/pets/{petId}"
+    },
+    "updateOwnersPet": {
+      "method": "PUT",
+      "path": "/owners/{ownerId}/pets/{petId}"
+    },
+    "addVisitToOwner": {
+      "method": "POST",
+      "path": "/owners/{ownerId}/pets/{petId}/visits"
+    },
+    "listPetTypes": {
+      "method": "GET",
+      "path": "/pettypes"
+    },
+    "addPetType": {
+      "method": "POST",
+      "path": "/pettypes"
+    },
+    "getPetType": {
+      "method": "GET",
+      "path": "/pettypes/{petTypeId}"
+    },
+    "updatePetType": {
+      "method": "PUT",
+      "path": "/pettypes/{petTypeId}"
+    },
+    "deletePetType": {
+      "method": "DELETE",
+      "path": "/pettypes/{petTypeId}"
+    },
+    "listPets": {
+      "method": "GET",
+      "path": "/pets"
+    },
+    "getPet": {
+      "method": "GET",
+      "path": "/pets/{petId}"
+    },
+    "updatePet": {
+      "method": "PUT",
+      "path": "/pets/{petId}"
+    },
+    "deletePet": {
+      "method": "DELETE",
+      "path": "/pets/{petId}"
+    },
+    "listVisits": {
+      "method": "GET",
+      "path": "/visits"
+    },
+    "addVisit": {
+      "method": "POST",
+      "path": "/visits"
+    },
+    "getVisit": {
+      "method": "GET",
+      "path": "/visits/{visitId}"
+    },
+    "updateVisit": {
+      "method": "PUT",
+      "path": "/visits/{visitId}"
+    },
+    "deleteVisit": {
+      "method": "DELETE",
+      "path": "/visits/{visitId}"
+    },
+    "listSpecialties": {
+      "method": "GET",
+      "path": "/specialties"
+    },
+    "addSpecialty": {
+      "method": "POST",
+      "path": "/specialties"
+    },
+    "getSpecialty": {
+      "method": "GET",
+      "path": "/specialties/{specialtyId}"
+    },
+    "updateSpecialty": {
+      "method": "PUT",
+      "path": "/specialties/{specialtyId}"
+    },
+    "deleteSpecialty": {
+      "method": "DELETE",
+      "path": "/specialties/{specialtyId}"
+    },
+    "listVets": {
+      "method": "GET",
+      "path": "/vets"
+    },
+    "addVet": {
+      "method": "POST",
+      "path": "/vets"
+    },
+    "getVet": {
+      "method": "GET",
+      "path": "/vets/{vetId}"
+    },
+    "updateVet": {
+      "method": "PUT",
+      "path": "/vets/{vetId}"
+    },
+    "deleteVet": {
+      "method": "DELETE",
+      "path": "/vets/{vetId}"
+    },
+    "addUser": {
+      "method": "POST",
+      "path": "/users"
+    }
+  }
+}

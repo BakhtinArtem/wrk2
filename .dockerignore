@@ -1,0 +1,8 @@
+.git
+.gitmodules
+**/*.o
+obj
+wrk
+workdir/v3.0/output
+.cursor
+**/.DS_Store
